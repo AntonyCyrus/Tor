@@ -136,7 +136,7 @@ sudo apt install torsocks
 ```
 
 ```bash
-torsocks curl https://check.torproject.org
+torsocks curl -s https://check.torproject.org | grep -i "Congratulations"
 ```
 
 这会通过 Tor 网络访问 check.torproject.org，并返回您是否在使用 Tor 网络的状态。
