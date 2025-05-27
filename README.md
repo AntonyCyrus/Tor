@@ -54,9 +54,13 @@ PublishServerDescriptor 0
 # 禁止出口流量
 ExitPolicy reject6 *:*, reject *:*
 
+# 引用GeoIP库
+GeoIPFile /usr/share/tor/geoip
+GeoIPv6File /usr/share/tor/geoip6
+
 # 排除特定国家节点
 ExcludeNodes {CN},{HK},{MO},{??}
-ExitNodes {IS},{CH},{NO},{NL},{SE},{DK},{FI},{DE},{CA},{ES},{EE},{LV},{LT},{RO},{AR},{UY},{NZ}
+ExitNodes {CH},{NO},{NL},{SE},{DK},{DE},{ES}
 StrictNodes 1  # 强制使用指定出口节点
 
 Log notice file /var/log/tor/notices.log
