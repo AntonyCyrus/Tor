@@ -1,163 +1,560 @@
-# 个人自用Debian 12系统搭建Tor网络方案
-## 更新软件源
+# Debian 13 VPS：sing-box Reality 入站复用 Tor SocksPort 与私人网桥成功教程
+
+---
+
+## 0. 最终目标
+
+最终实现：
 
 ```bash
-sudo apt update
-sudo apt upgrade
+客户端 / Mihomo
+  → Reality 443
+    → VPS sing-box
+      ├─ Direct 用户
+      │   ├─ 普通 TCP 直连
+      │   ├─ DNS 走 127.0.0.1:53
+      │   └─ 访问 VPS_PUBLIC_IP:10080 时 override 到 127.0.0.1:10080 私人网桥
+      │
+      └─ Tor 用户
+          ├─ TCP 走 Tor SocksPort 127.0.0.1:9050
+          ├─ DNS 走 Tor DNSPort 127.0.0.1:9053
+          └─ 普通 UDP 直接 reject
 ```
 
-## 安装 Tor
-使用 apt 包管理器安装 Tor
+---
+
+## 1. Tor 端配置
+
+编辑 Tor 配置：
 
 ```bash
-sudo apt install tor
+nano /etc/tor/torrc
 ```
 
-## 启用 Tor 服务
+确认至少存在：
 
-```bash
-sudo systemctl enable tor
 ```
-
-```bash
-sudo systemctl start tor
-```
-
-## 检查 Tor 是否正在运行
-
-```bash
-sudo systemctl status tor
-```
-
-## 配置 torrc 文件
-Tor 的配置文件是 torrc，默认路径是 /etc/tor/torrc。如果您希望更改 Tor 的配置（比如修改端口、启用桥接等），请按照以下步骤
-
-###  编辑 torrc 文件
-
-```bash
-sudo nano /etc/tor/torrc
-```
-
-###  个人推荐配置
-
-```bash
-# SOCKS5 代理监听本地 IPv4 
 SocksPort 127.0.0.1:9050
-
-# 启用桥接节点
-ORPort 9001
-BridgeRelay 1
-
-# 禁止网桥公开，避免其他人自动获取该网桥
-PublishServerDescriptor 0
-
-# 禁止出口流量
-ExitPolicy reject6 *:*, reject *:*
-
-# 引用GeoIP库
-GeoIPFile /usr/share/tor/geoip
-GeoIPv6File /usr/share/tor/geoip6
-
-# 排除特定国家节点
-ExcludeNodes {CN},{HK},{MO},{??}
-ExitNodes {CH},{NO},{NL},{SE},{DK},{DE},{ES}
-StrictNodes 1  # 强制使用指定出口节点
-
-Log notice file /var/log/tor/notices.log
+DNSPort 127.0.0.1:9053
 ```
 
-保存修改并关闭编辑器。对于 nano，按 CTRL + O 保存，然后按 CTRL + X 退出
+如果需要 .onion 通过 DNSPort 映射虚拟地址，可额外加入：
 
-###  重启 Tor 服务
+```
+AutomapHostsOnResolve 1
+AutomapHostsSuffixes .onion,.exit
+```
+
+重启 Tor：
 
 ```bash
-sudo systemctl restart tor
+systemctl restart tor
 ```
 
-## 检查 Tor 是否正常运行
-### 通过日志检查 Tor 状态
-您可以查看 Tor 的日志，确认其是否启动并正常运行：
+检查 Tor 端口是否监听：
 
 ```bash
-sudo journalctl -u tor -f
+ss -lntup | grep -E '9050|9053'
 ```
 
-这将显示 Tor 的实时日志，您可以看到是否有任何错误或警告。
-
-### 使用 torify 工具测试
-Tor 安装完成后，您可以使用 torify 来测试是否成功通过 Tor 进行网络连接
+理想结果应看到：
 
 ```bash
-torify curl https://check.torproject.org
+127.0.0.1:9050
+127.0.0.1:9053
 ```
 
-### 检查 Tor 网络连接
+---
+
+## 2. VPS 端 sing-box 完整配置模板
+
+替换以下占位符：
 
 ```bash
-nc -zv 127.0.0.1 9050
+DIRECT_UUID
+TOR_UUID
+REALITY_PRIVATE_KEY
+REALITY_SHORT_ID
+VPS_PUBLIC_IP
 ```
 
-如果端口开启并监听，您应该看到类似以下输出：
+注意：
 
 ```bash
-Connection to 127.0.0.1 9050 port [tcp/socks] succeeded!
+VPS_PUBLIC_IP/32
 ```
 
-### 通过 Tor 测试互联网匿名性
+需要替换成你的真实 VPS 公网 IPv4，例如：
 
 ```bash
-torify curl ifconfig.me
+1.2.3.4/32
 ```
 
-您的 IP 应该会显示为 Tor 网络的出口节点的 IP，而不是您本地的 IP。
-
-## 使用工具监测Tor流量
-
-### nyx
-如果您想要一个专门的监控工具来查看 Tor 网络的流量和状态，nyx（前身为 arm）是一个非常受欢迎的命令行工具，它为 Tor 提供了一个实时的监控界面。
+完整配置如下：
 
 ```bash
-sudo apt update
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "udp",
+        "server": "127.0.0.1",
+        "server_port": 53
+      },
+      {
+        "tag": "dns-tor",
+        "type": "udp",
+        "server": "127.0.0.1",
+        "server_port": 9053
+      }
+    ],
+    "rules": [
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Direct"
+        ],
+        "action": "route",
+        "server": "dns-local",
+        "disable_cache": true
+      },
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Tor"
+        ],
+        "action": "route",
+        "server": "dns-tor",
+        "disable_cache": true
+      }
+    ],
+    "final": "dns-local"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "reality-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "name": "Direct",
+          "uuid": "DIRECT_UUID",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "name": "Tor",
+          "uuid": "TOR_UUID",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "developer.mozilla.org",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "developer.mozilla.org",
+            "server_port": 443
+          },
+          "private_key": "REALITY_PRIVATE_KEY",
+          "short_id": [
+            "REALITY_SHORT_ID"
+          ],
+          "max_time_difference": "1m"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "socks",
+      "tag": "tor-socks-out",
+      "server": "127.0.0.1",
+      "server_port": 9050,
+      "version": "5",
+      "network": "tcp"
+    }
+  ],
+  "route": {
+    "default_domain_resolver": {
+      "server": "dns-local"
+    },
+    "rules": [
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Direct"
+        ],
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Tor"
+        ],
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Direct"
+        ],
+        "ip_cidr": [
+          "VPS_PUBLIC_IP/32"
+        ],
+        "port": [
+          10080
+        ],
+        "action": "route",
+        "outbound": "direct",
+        "override_address": "127.0.0.1",
+        "override_port": 10080
+      },
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Tor"
+        ],
+        "network": "udp",
+        "action": "reject"
+      },
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Tor"
+        ],
+        "network": "tcp",
+        "action": "route",
+        "outbound": "tor-socks-out"
+      },
+      {
+        "inbound": [
+          "reality-in"
+        ],
+        "auth_user": [
+          "Direct"
+        ],
+        "action": "route",
+        "outbound": "direct"
+      }
+    ],
+    "final": "direct"
+  }
+}
 ```
+
+---
+
+## 3. VPS 端 sing-box 配置逻辑
+
+Direct 用户：
 
 ```bash
-sudo apt install nyx
+普通 TCP
+  → direct
+
+DNS 请求
+  → hijack-dns
+    → dns-local
+      → 127.0.0.1:53
+
+访问 VPS_PUBLIC_IP:10080
+  → override_address 127.0.0.1
+  → override_port 10080
+  → 私人网桥
 ```
+
+Tor 用户：
 
 ```bash
-nyx
+普通 TCP
+  → tor-socks-out
+    → 127.0.0.1:9050
+      → Tor SocksPort
+        → Tor 网络
+
+DNS 请求
+  → hijack-dns
+    → dns-tor
+      → 127.0.0.1:9053
+        → Tor DNSPort
+
+普通 UDP
+  → reject
 ```
 
-### torsocks
-torsocks 是一个用于通过 Tor 网络透明代理应用程序流量的工具。它可以使普通的命令行工具（例如 curl 或 wget）通过 Tor 网络路由流量，而不需要手动配置这些工具。虽然它本身不专门用于监控 Tor 流量，但它可以让您确保通过 Tor 网络访问互联网。
+关键点：
 
 ```bash
-sudo apt update
+Tor SocksPort 9050 只承接 TCP。
+Tor DNSPort 9053 只承接 DNS。
+Tor 用户普通 UDP 必须拒绝，避免 QUIC / UDP 流量导致超时或泄露。
 ```
+
+---
+
+## 4. 检查并重启 sing-box
+
+检查配置：
 
 ```bash
-sudo apt install torsocks
+sing-box check -c /etc/sing-box/config.json
 ```
+
+格式化配置：
 
 ```bash
-torsocks curl -s https://check.torproject.org | grep -i "Congratulations"
+sing-box format -w -c /etc/sing-box/config.json
 ```
 
-这会通过 Tor 网络访问 check.torproject.org，并返回您是否在使用 Tor 网络的状态。
-
-### torctl
-torctl 是一个用于管理 Tor 进程的命令行工具，能够提供 Tor 网络的状态信息、启动和停止 Tor 服务、查看统计信息等。它可以帮助您监控 Tor 流量和连接的状态。
+重启服务：
 
 ```bash
-sudo apt update
+systemctl restart sing-box
+systemctl restart tor
 ```
+
+确认监听端口：
 
 ```bash
-sudo apt install torctl
+ss -lntup | grep -E '9050|9053|:53|:443|10080'
 ```
+
+---
+
+## 5. 验证 Tor 服务本身是否正常
+
+测试 Tor SocksPort：
 
 ```bash
-torctl status
+curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
 ```
 
-这个命令会返回关于 Tor 进程、节点连接、流量使用等信息。
+正常结果应包含：
+
+```bash
+{"IsTor":true}
+```
+
+测试 Tor DNSPort：
+
+```bash
+dig @127.0.0.1 -p 9053 example.com A
+```
+
+测试本地普通 DNS：
+
+```bash
+dig @127.0.0.1 -p 53 example.com A
+```
+
+---
+
+## 6. 验证 sing-box 是否真的把 Tor 用户送到了 Tor SocksPort
+
+在 VPS 上开一个窗口监听 9050：
+
+```bash
+tcpdump -ni lo tcp port 9050
+```
+
+然后客户端使用 Tor 这个 Reality 用户访问：
+
+```bash
+https://check.torproject.org/api/ip
+```
+
+如果能访问，并且 tcpdump 看到 9050 上有流量，说明链路成功：
+
+```bash
+客户端
+  → Reality Tor 用户
+    → VPS sing-box
+      → 127.0.0.1:9050
+        → Tor 网络
+```
+
+---
+
+## 7. Mihomo TUN 全局模式关键设置
+
+如果客户端使用 Mihomo TUN + 全局模式，Tor Reality 节点不能当成全协议 VPN 使用。
+
+Tor Reality 节点需要关闭 UDP：
+
+```bash
+proxies:
+  - name: "Tor-Reality"
+    type: vless
+    server: VPS_PUBLIC_IP
+    port: 443
+    uuid: TOR_UUID
+    flow: xtls-rprx-vision
+    network: tcp
+    tls: true
+    servername: developer.mozilla.org
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: REALITY_PUBLIC_KEY
+      short-id: REALITY_SHORT_ID
+    encryption: ""
+    udp: false
+    smux:
+      enabled: false
+```
+
+不要配置：
+
+```bash
+packet-encoding: xudp
+```
+
+在 Mihomo 规则中，本地拒绝 UDP，尤其是 UDP/443 QUIC：
+
+```bash
+rules:
+  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+  - NETWORK,UDP,REJECT
+  - MATCH,Tor-Reality
+```
+
+含义：
+
+```bash
+UDP/443 QUIC
+  → 本地拒绝，让浏览器回落 TCP
+
+其他普通 UDP
+  → 本地拒绝
+
+TCP
+  → Tor-Reality
+    → VPS sing-box
+      → Tor SocksPort
+```
+
+---
+
+## 8. Mihomo DNS 建议
+
+TUN 模式下，DNS 往往会先被 Mihomo 自己处理，所以建议使用 fake-ip，让 Mihomo 保留域名映射，再把 TCP 请求交给 Reality 节点。
+
+示例：
+
+```yaml
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - system
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+```
+
+核心目标：
+
+```
+Mihomo 返回 fake-ip
+Mihomo 内部保留 域名 ↔ fake-ip 映射
+TCP 请求进入 Tor-Reality
+VPS sing-box 把 TCP 送入 Tor SocksPort
+由 Tor 完成出口访问
+```
+
+---
+
+## 9. 最终成功链路
+
+Mihomo TUN 全局链路：
+
+```bash
+Mihomo TUN 全局
+  → 本地拒绝 UDP / QUIC
+  → TCP 进入 Tor-Reality
+    → Reality 443
+      → VPS sing-box reality-in
+        → auth_user = Tor
+          → TCP route 到 tor-socks-out
+            → 127.0.0.1:9050
+              → Tor 网络
+```
+
+DNS 链路：
+
+```bash
+Direct 用户 DNS
+  → VPS sing-box hijack-dns
+    → dns-local
+      → 127.0.0.1:53
+
+Tor 用户 DNS
+  → VPS sing-box hijack-dns
+    → dns-tor
+      → 127.0.0.1:9053
+```
+
+私人网桥链路：
+
+```bash
+Direct 用户访问 VPS_PUBLIC_IP:10080
+  → VPS sing-box 匹配 ip_cidr + port
+    → override_address 127.0.0.1
+    → override_port 10080
+      → 本机私人网桥
+```
+
+---
+
+## 10. 排错顺序
+
+如果以后又不通，按这个顺序排查：
+
+```bash
+systemctl status tor --no-pager
+ss -lntup | grep -E '9050|9053|:53|:443|10080'
+curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
+dig @127.0.0.1 -p 9053 example.com A
+sing-box check -c /etc/sing-box/config.json
+journalctl -u sing-box -f
+tcpdump -ni lo tcp port 9050
+```
+
+判断标准：
+
+```bash
+1. curl --socks5-hostname 127.0.0.1:9050 能返回 IsTor:true
+2. dig @127.0.0.1 -p 9053 能解析域名
+3. 客户端走 Tor-Reality 时，VPS lo 上能看到 9050 TCP 流量
+4. Mihomo 端 UDP 已关闭，并且规则里拒绝 UDP
+```
+
+满足这四点，整套链路就是正常的。
