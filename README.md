@@ -1,12 +1,14 @@
 # Debian 13 VPS：sing-box Reality 入站复用 Tor SocksPort 与私人网桥成功教程
 
+本文只记录最终成功有效的方案。文中需要复制粘贴的命令和配置块，统一使用 ```bash / ```json / ```yaml / ``` 作为代码块边界，避免 Markdown 嵌套时产生歧义。
+
 ---
 
 ## 0. 最终目标
 
 最终实现：
 
-```bash
+```
 客户端 / Mihomo
   → Reality 443
     → VPS sing-box
@@ -59,7 +61,7 @@ ss -lntup | grep -E '9050|9053'
 
 理想结果应看到：
 
-```bash
+```
 127.0.0.1:9050
 127.0.0.1:9053
 ```
@@ -70,7 +72,7 @@ ss -lntup | grep -E '9050|9053'
 
 替换以下占位符：
 
-```bash
+```
 DIRECT_UUID
 TOR_UUID
 REALITY_PRIVATE_KEY
@@ -80,19 +82,19 @@ VPS_PUBLIC_IP
 
 注意：
 
-```bash
+```
 VPS_PUBLIC_IP/32
 ```
 
 需要替换成你的真实 VPS 公网 IPv4，例如：
 
-```bash
+```
 1.2.3.4/32
 ```
 
 完整配置如下：
 
-```bash
+```json
 {
   "log": {
     "level": "info",
@@ -275,7 +277,7 @@ VPS_PUBLIC_IP/32
 
 Direct 用户：
 
-```bash
+```
 普通 TCP
   → direct
 
@@ -292,7 +294,7 @@ DNS 请求
 
 Tor 用户：
 
-```bash
+```
 普通 TCP
   → tor-socks-out
     → 127.0.0.1:9050
@@ -311,7 +313,7 @@ DNS 请求
 
 关键点：
 
-```bash
+```
 Tor SocksPort 9050 只承接 TCP。
 Tor DNSPort 9053 只承接 DNS。
 Tor 用户普通 UDP 必须拒绝，避免 QUIC / UDP 流量导致超时或泄露。
@@ -358,7 +360,7 @@ curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
 
 正常结果应包含：
 
-```bash
+```json
 {"IsTor":true}
 ```
 
@@ -386,13 +388,13 @@ tcpdump -ni lo tcp port 9050
 
 然后客户端使用 Tor 这个 Reality 用户访问：
 
-```bash
+```
 https://check.torproject.org/api/ip
 ```
 
 如果能访问，并且 tcpdump 看到 9050 上有流量，说明链路成功：
 
-```bash
+```
 客户端
   → Reality Tor 用户
     → VPS sing-box
@@ -408,7 +410,7 @@ https://check.torproject.org/api/ip
 
 Tor Reality 节点需要关闭 UDP：
 
-```bash
+```yaml
 proxies:
   - name: "Tor-Reality"
     type: vless
@@ -431,13 +433,13 @@ proxies:
 
 不要配置：
 
-```bash
+```yaml
 packet-encoding: xudp
 ```
 
 在 Mihomo 规则中，本地拒绝 UDP，尤其是 UDP/443 QUIC：
 
-```bash
+```yaml
 rules:
   - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
   - NETWORK,UDP,REJECT
@@ -446,7 +448,7 @@ rules:
 
 含义：
 
-```bash
+```
 UDP/443 QUIC
   → 本地拒绝，让浏览器回落 TCP
 
@@ -496,7 +498,7 @@ VPS sing-box 把 TCP 送入 Tor SocksPort
 
 Mihomo TUN 全局链路：
 
-```bash
+```
 Mihomo TUN 全局
   → 本地拒绝 UDP / QUIC
   → TCP 进入 Tor-Reality
@@ -510,7 +512,7 @@ Mihomo TUN 全局
 
 DNS 链路：
 
-```bash
+```
 Direct 用户 DNS
   → VPS sing-box hijack-dns
     → dns-local
@@ -524,7 +526,7 @@ Tor 用户 DNS
 
 私人网桥链路：
 
-```bash
+```
 Direct 用户访问 VPS_PUBLIC_IP:10080
   → VPS sing-box 匹配 ip_cidr + port
     → override_address 127.0.0.1
@@ -550,7 +552,7 @@ tcpdump -ni lo tcp port 9050
 
 判断标准：
 
-```bash
+```
 1. curl --socks5-hostname 127.0.0.1:9050 能返回 IsTor:true
 2. dig @127.0.0.1 -p 9053 能解析域名
 3. 客户端走 Tor-Reality 时，VPS lo 上能看到 9050 TCP 流量
