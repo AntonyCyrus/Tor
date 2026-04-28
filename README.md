@@ -139,6 +139,10 @@ CERT=$(grep -oP 'cert=\K\S+' /var/lib/tor/pt_state/obfs4_bridgeline.txt)
 echo "Fingerprint is: $FINGERPRINT"
 echo "Cert is: $CERT"
 ```
+组合网桥信息
+```bash
+obfs4 <你的VPS公网IP>:<前置代理监听的公网端口> <你的FINGERPRINT> cert=<你的CERT> iat-mode=0
+```
 完成
 
 
