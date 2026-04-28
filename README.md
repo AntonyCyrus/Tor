@@ -105,21 +105,7 @@ curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip
 dig @127.0.0.1 -p 9053 example.com A
 ```
 
-七、可选增强配置
-
-```bash
-SafeSocks 1
-TestSocks 1
-```
-
-八、网桥（可选）
-
-```bash
-UseBridges 1
-Bridge obfs4 IP:PORT FINGERPRINT cert=XXXX iat-mode=0
-```
-
-九、日志排错
+七、日志排错
 
 ```bash
 journalctl -u tor -f
@@ -129,19 +115,30 @@ journalctl -u tor -f
 Bootstrapped 100% (done): Done
 ```
 
-十、最终结构
+八、最终结构
 
 ```bash
 sing-box → Tor 用户 → 127.0.0.1:9050
 sing-box DNS → 127.0.0.1:9053
 ```
 
-十一、常见错误
+九、常见错误
 
 1. 不要监听 0.0.0.0
 2. 不要让 UDP 走 9050
 3. 确保 Tor 已 bootstrap 完成
+十、确保 /var/lib/tor 目录的归属权是 debian-tor
 
+```bash
+chown -R debian-tor:debian-tor /var/lib/tor
+```
+十、提取网桥
+```bash
+FINGERPRINT=$(cat /var/lib/tor/fingerprint | awk '{print $2}')
+CERT=$(grep -oP 'cert=\K\S+' /var/lib/tor/pt_state/obfs4_bridgeline.txt)
+echo "Fingerprint is: $FINGERPRINT"
+echo "Cert is: $CERT"
+```
 完成
 
 
