@@ -55,7 +55,7 @@ PublishServerDescriptor 0
 ## 3. 本地客户端 Proxy 设置 (Socks5)
 # 供 VPS 本地应用或通过 SSH 隧道使用
 SocksPort 127.0.0.1:9050
-DNSPort 127.0.0.1:5353
+DNSPort 127.0.0.1:9053
 AutomapHostsOnResolve 1
 AutomapHostsSuffixes .onion,.exit
 
