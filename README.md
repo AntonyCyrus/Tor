@@ -133,6 +133,12 @@ sing-box DNS → 127.0.0.1:9053
 chown -R debian-tor:debian-tor /var/lib/tor
 ```
 十、提取网桥
+obfs4 在第一次启动时，生成 obfs4_bridgeline.txt 可能需要 30-60 秒
+强制触发指纹生成
+```bash
+ls -l /var/lib/tor/fingerprint
+ls -l /var/lib/tor/pt_state/obfs4_bridgeline.txt
+```
 ```bash
 FINGERPRINT=$(cat /var/lib/tor/fingerprint | awk '{print $2}')
 CERT=$(grep -oP 'cert=\K\S+' /var/lib/tor/pt_state/obfs4_bridgeline.txt)
