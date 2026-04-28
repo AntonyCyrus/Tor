@@ -1,9 +1,24 @@
 Debian 13 从 0 安装 Tor（最小可用教程）
 
 一、安装 Tor
+更新
+```bash
+apt update && apt upgrade -y
+apt install apt-transport-https curl gnupg2 -y
+```
+添加 Tor Project 官方存储库
+添加 GPG 密钥
+```bash
+curl -f sS https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89.asc | gpg --dearmor | tee /usr/share/keyrings/tor-archive-keyring.gpg >/dev/null
+```
+添加存储库（针对 Debian 13）：
+```bash
+echo "deb [signed-by=/usr/share/keyrings/tor-archive-keyring.gpg] https://deb.torproject.org/torproject.org trixie main" | tee /etc/apt/sources.list.d/tor.list
+```
+安装 Tor 和 obfs4proxy
 ```bash
 apt update
-apt install -y tor
+apt install tor deb.torproject.org-keyring obfs4proxy -y
 ```
 
 二、确认服务状态
@@ -17,18 +32,46 @@ Active: active (running)
 
 编辑配置文件：
 ```bash
-nano /etc/tor/torrc
-```
+cat <<EOF > /etc/tor/torrc
+# ==========================================================
+# REVISED COMPREHENSIVE TOR CONFIGURATION (DEBIAN 13)
+# ==========================================================
 
-写入如下内容：
-```bash
+## 1. 基础运行设置
+DataDirectory /var/lib/tor
+User debian-tor
+Log notice file /var/log/tor/notices.log
+
+## 2. 私有 obfs4 网桥设置 (配合前置代理)
+BridgeRelay 1
+# 内部通信端口，必须与 obfs4 监听端口不同
+ORPort 127.0.0.1:9001
+# obfs4 监听在本地 10080，供你的 Sing-box/SS 等前置代理转发
+ServerTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+ServerTransportListenAddr obfs4 127.0.0.1:10080
+# 设为 0 以保持网桥私密，不向官方目录发布 
+PublishServerDescriptor 0
+
+## 3. 本地客户端 Proxy 设置 (Socks5)
+# 供 VPS 本地应用或通过 SSH 隧道使用
 SocksPort 127.0.0.1:9050
-DNSPort 127.0.0.1:9053
+DNSPort 127.0.0.1:5353
+AutomapHostsOnResolve 1
+AutomapHostsSuffixes .onion,.exit
 
-ClientUseIPv6 0
-AvoidDiskWrites 1
+## 4. 带宽与限制 (保留你的优化项目) 
+RelayBandwidthRate 5 MBytes
+RelayBandwidthBurst 10 MBytes
 
-Log notice syslog
+## 5. 安全与出口策略 
+ExitPolicy reject *:*
+IPv6Exit 0
+
+## 6. 路由优化与地理限制 (保留你的客制化) 
+ExcludeNodes {CN},{HK},{MO},{??}
+ExitNodes {CH},{NO},{NL},{SE},{DK},{DE},{ES}
+StrictNodes 1
+EOF
 ```
 
 四、重启 Tor
