@@ -125,7 +125,7 @@ sing-box DNS → 127.0.0.1:9053
 1. 不要监听 0.0.0.0
 2. 不要让 UDP 走 9050
 3. 确保 Tor 已 bootstrap 完成
-十、确保 /var/lib/tor 目录的归属权是 debian-tor
+4、确保 /var/lib/tor 目录的归属权是 debian-tor
 
 ```bash
 chown -R debian-tor:debian-tor /var/lib/tor
