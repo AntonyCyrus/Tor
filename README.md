@@ -33,6 +33,7 @@ Active: active (running)
 编辑配置文件：
 ```bash
 cat <<EOF > /etc/tor/torrc
+
 # ==========================================================
 # REVISED COMPREHENSIVE TOR CONFIGURATION (DEBIAN 13)
 # ==========================================================
@@ -59,18 +60,15 @@ DNSPort 127.0.0.1:9053
 AutomapHostsOnResolve 1
 AutomapHostsSuffixes .onion,.exit
 
-## 4. 带宽与限制 (保留你的优化项目) 
-RelayBandwidthRate 5 MBytes
-RelayBandwidthBurst 10 MBytes
-
-## 5. 安全与出口策略 
+## 4. 安全与出口策略 
 ExitPolicy reject *:*
 IPv6Exit 0
 
-## 6. 路由优化与地理限制 (保留你的客制化) 
+## 5. 路由优化与地理限制 (保留你的客制化) 
 ExcludeNodes {CN},{HK},{MO},{??}
 ExitNodes {CH},{NO},{NL},{SE},{DK},{DE},{ES}
 StrictNodes 1
+
 EOF
 ```
 
