@@ -247,6 +247,7 @@ VPS_PUBLIC_IP/32
 完整配置如下：
 
 ```json
+sudo cat << 'EOF' > /etc/sing-box/config.json
 {
   "log": {
     "level": "info",
@@ -421,6 +422,7 @@ VPS_PUBLIC_IP/32
     "final": "direct"
   }
 }
+EOF
 ```
 
 ---
